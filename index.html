@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Villa Moneda</title>
+<style>
+:root{--bg:#e8eef0;--fg:#14262e;--card:#ffffff;--bd:#b7c7cc;--gold:#b7791f;--on:#14262e;--onfg:#fff;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1c22;--fg:#e6f0f2;--card:#18303a;--bd:#2d4a56;--gold:#f6c453;--on:#f6c453;--onfg:#14262e}}
+:root[data-theme="dark"]{--bg:#0f1c22;--fg:#e6f0f2;--card:#18303a;--bd:#2d4a56;--gold:#f6c453;--on:#f6c453;--onfg:#14262e}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 "Trebuchet MS",system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;gap:8px;padding:8px}
+#app{width:100%;max-width:960px;display:flex;flex-direction:column;gap:8px}
+#hud,.row{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center}
+#hud span{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:4px 10px}
+canvas{width:100%;height:auto;border-radius:10px;border:1px solid var(--bd);touch-action:none;display:block}
+button{font:inherit;color:var(--fg);background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+button.on{background:var(--on);color:var(--onfg);border-color:var(--on)}
+button:disabled{opacity:.45;cursor:default}
+h2{font-size:13px;margin:0;font-weight:700;width:100%}
+#log{min-height:20px;color:var(--gold);font-weight:700}
+#pad{display:flex;gap:8px;justify-content:space-between}
+#pad button{flex:1;font-size:22px;padding:12px;user-select:none;touch-action:none}
+.hint{opacity:.75;font-size:12px}
+body,button{font-family:"VT323","Courier New",monospace;font-size:18px;line-height:1.15}
+#hud span,button,canvas{border-radius:0;border-width:2px}
+button{box-shadow:0 3px 0 var(--bd)}button:active{transform:translateY(2px);box-shadow:0 1px 0 var(--bd)}
+canvas{image-rendering:pixelated}.hint{font-size:16px}h2{font-size:17px}
+</style><link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet"></head><body>
+<div id="app">
+<div id="hud">
+<span>💰 <b id="m"></b></span><span>🧰 Cofre <b id="ch"></b></span><span>👥 <b id="po"></b></span><span>😊 <b id="hp"></b>%</span><span>📅 Día <b id="dy"></b></span>
+<span>Impuesto <button data-tx="-2" aria-label="Bajar impuesto">−</button> <b id="tx"></b>% <button data-tx="2" aria-label="Subir impuesto">+</button></span>
+</div>
+<canvas id="c" width="960" height="400" aria-label="Ciudad"></canvas>
+<div id="log"></div>
+<div class="row"><h2>Construir en un terreno vacío</h2><span id="bt" class="row"></span></div>
+<div class="row"><h2>Alcaldía: párate frente a ella y lanza monedas a la mejora elegida</h2><span id="up" class="row"></span></div>
+<div id="pad"><button id="bl" aria-label="Izquierda">◀</button><button id="bt2" aria-label="Lanzar moneda">🪙</button><button id="br" aria-label="Derecha">▶</button></div>
+<div class="hint">Mover: ← → o A D · Lanzar moneda: Espacio (mantén para repetir). Recoge los impuestos del cofre caminando hasta la alcaldía.</div>
+</div>
+<script>
+const $=id=>document.getElementById(id),C=$('c'),X=C.getContext('2d'),W=960,H=400,G=320,DAY=16,LIM=1300;
+const T={casa:{n:'Casa',e:'🏠',cost:10,m:1,c:'#d9a066'},mercado:{n:'Mercado',e:'🛒',cost:25,m:2,c:'#c7566b'},parque:{n:'Parque',e:'🌳',cost:20,m:1,c:'#4f9d5f'},granja:{n:'Granja',e:'🌾',cost:15,m:1,c:'#caa83c'}};
+const UP={vel:{n:'Botas',e:'👟',d:'+25% velocidad'},imp:{n:'Recaudación',e:'📜',d:'+15% impuestos'},fel:{n:'Festivales',e:'🎉',d:'+8 felicidad'}};
+const S={money:30,chest:0,pop:2,happy:70,day:1,t:0,tax:10,sel:'casa',upSel:'vel',unpaid:false,log:'',up:{vel:{lv:0,p:0},imp:{lv:0,p:0},fel:{lv:0,p:0}}};
+const P={x:0,dir:1,walk:0,cd:0};
+const plots=[];for(let i=1;i<=7;i++)plots.push({x:-170*i,t:null,p:0},{x:170*i,t:null,p:0});
+const coins=[],floats=[],keys={};
+const n=t=>plots.filter(p=>p.t===t).length;
+const ucost=k=>20*(S.up[k].lv+1);
+const say=(s,x)=>floats.push({x,y:G-120,s,t:0});
+
+function target(){if(Math.abs(P.x)<100)return{hall:1};let b=null,d=70;for(const p of plots){const k=Math.abs(p.x-P.x);if(!p.t&&k<d){d=k;b=p}}return b}
+function toss(){
+  const g=target();if(!g||S.money<1)return;
+  if(g.hall){const u=S.up[S.upSel];if(u.lv>=4)return;S.money--;u.p++;coins.push({x:P.x,tx:0,t:0});
+    if(u.p>=ucost(S.upSel)){u.p=0;u.lv++;say(UP[S.upSel].n+' nivel '+u.lv,0)}}
+  else{S.money--;g.p++;coins.push({x:P.x,tx:g.x,t:0});if(g.p>=T[S.sel].cost){g.t=S.sel;g.p=0;say('¡Construido!',g.x)}}
+  ui();
+}
+function endDay(){
+  const hm=.4+S.happy/100,imp=S.up.imp.lv;
+  const inc=Math.floor(S.pop*S.tax/6*hm*(1+.15*imp)+n('mercado')*6*hm);
+  let mt=0;for(const p of plots)if(p.t)mt+=T[p.t].m;
+  S.chest+=inc;let pay=mt,f=Math.min(S.chest,pay);S.chest-=f;pay-=f;
+  f=Math.min(S.money,pay);S.money-=f;pay-=f;S.unpaid=pay>0;
+  const cap=2+n('casa')*4;
+  if(S.happy>45&&S.pop<cap)S.pop+=Math.min(cap-S.pop,1+Math.floor(n('casa')/2));
+  else if(S.happy<30)S.pop=Math.max(1,S.pop-1);
+  S.day++;S.log='Día '+(S.day-1)+': +'+inc+' impuestos · −'+mt+' mantenimiento'+(S.unpaid?' · ¡No alcanzó! Los edificios se deterioran y bajó la felicidad.':'');
+  ui();
+}
+function update(dt){
+  const sp=150*(1+.25*S.up.vel.lv);let v=(keys.R?1:0)-(keys.L?1:0);
+  if(v){P.dir=v;P.x=Math.max(-LIM,Math.min(LIM,P.x+v*sp*dt));P.walk+=dt*10}
+  P.cd-=dt;if(keys.T&&P.cd<=0){toss();P.cd=.14}
+  if(Math.abs(P.x)<100&&S.chest>0){S.money+=S.chest;say('+'+S.chest+' 💰',0);S.chest=0;ui()}
+  S.t+=dt;if(S.t>=DAY){S.t=0;endDay()}
+  const food=n('granja')*8+4,hungry=Math.min(25,Math.max(0,(S.pop-food)*3));
+  const tg=Math.max(0,Math.min(100,55+n('parque')*6+S.up.fel.lv*8-(S.tax-10)*2.2-hungry-(S.unpaid?15:0)));
+  S.happy+=(tg-S.happy)*dt*.4;
+  for(const c of coins)c.t+=dt*3;for(let i=coins.length;i--;)if(coins[i].t>=1)coins.splice(i,1);
+  for(const f of floats)f.t+=dt;for(let i=floats.length;i--;)if(floats[i].t>1.4)floats.splice(i,1);
+}
+function ground(f){const L=Math.sin(f*Math.PI);const g=X.createLinearGradient(0,0,0,G);g.addColorStop(0,`hsl(215,55%,${14+34*L}%)`);g.addColorStop(1,`hsl(${25+160*L},60%,${40+25*L}%)`);X.fillStyle=g;X.fillRect(-LIM-W,0,2*LIM+2*W,G);
+  X.fillStyle=`hsl(120,35%,${18+14*L}%)`;X.fillRect(-LIM-W,G,2*LIM+2*W,H-G)}
+function bld(p){const t=T[p.t];X.fillStyle=S.unpaid?'#7d8a8f':t.c;X.fillRect(p.x-26,G-44,52,44);X.fillStyle='rgba(0,0,0,.28)';X.beginPath();X.moveTo(p.x-32,G-44);X.lineTo(p.x,G-70);X.lineTo(p.x+32,G-44);X.fill();X.font='24px serif';X.textAlign='center';X.fillText(t.e,p.x,G-14)}
+function hall(){const lv=S.up.vel.lv+S.up.imp.lv+S.up.fel.lv,w=120+lv*8;X.fillStyle='#8c98a0';X.fillRect(-w/2,G-90,w,90);X.fillStyle='#5b6870';X.fillRect(-w/2-8,G-100,w+16,12);
+  X.fillStyle='#b0443a';X.beginPath();X.moveTo(-w/2-10,G-100);X.lineTo(0,G-140);X.lineTo(w/2+10,G-100);X.fill();
+  X.fillStyle='#3a2a1a';X.fillRect(-12,G-44,24,44);X.fillStyle='#f6c453';X.fillRect(0,G-175,3,36);X.fillRect(3,G-175,18,10);
+  X.font='20px serif';X.textAlign='center';X.fillText('🏛️',0,G-62);if(S.chest>0)X.fillText('🧰 '+S.chest,0,G-148)}
+function plot(p){const near=Math.abs(P.x-p.x)<70,c=T[S.sel];X.setLineDash([5,4]);X.strokeStyle=near?'#f6c453':'rgba(255,255,255,.55)';X.lineWidth=2;X.strokeRect(p.x-30,G-48,60,48);X.setLineDash([]);
+  X.globalAlpha=.55;X.font='22px serif';X.textAlign='center';X.fillText(c.e,p.x,G-16);X.globalAlpha=1;
+  if(near){X.fillStyle='#fff';X.font='bold 12px sans-serif';X.fillText(p.p+'/'+c.cost,p.x,G-56)}}
+function man(){const b=Math.sin(P.walk)*2;X.save();X.translate(P.x,G+b*.5);X.fillStyle='#2a6f97';X.fillRect(-7,-30,14,22);X.fillStyle='#e8b98f';X.beginPath();X.arc(0,-38,7,0,7);X.fill();
+  X.fillStyle='#f6c453';X.fillRect(-7,-47,14,5);X.fillStyle='#222';X.fillRect(P.dir*3-1,-39,2,2);X.fillStyle='#333';X.fillRect(-6,-8,5,8+b);X.fillRect(1,-8,5,8-b);X.restore()}
+function draw(){
+  const cam=Math.max(-LIM,Math.min(LIM-W,P.x-W/2));X.clearRect(0,0,W,H);X.save();X.translate(-cam,0);ground(S.t/DAY);
+  const tg=target();hall();for(const p of plots)p.t?bld(p):plot(p);man();
+  for(const c of coins){const y=G-40-Math.sin(c.t*Math.PI)*60;X.font='16px serif';X.textAlign='center';X.fillText('🪙',c.x+(c.tx-c.x)*c.t,y)}
+  X.fillStyle='#fff';X.font='bold 15px sans-serif';X.textAlign='center';for(const f of floats){X.globalAlpha=1-f.t/1.4;X.fillText(f.s,f.x,f.y-f.t*30)}X.globalAlpha=1;X.restore();
+  X.fillStyle='rgba(0,0,0,.35)';X.fillRect(0,0,W,6);X.fillStyle='#f6c453';X.fillRect(0,0,W*S.t/DAY,6);
+  if(Math.abs(P.x)<100){X.fillStyle='rgba(0,0,0,.5)';X.fillRect(W/2-150,14,300,26);X.fillStyle='#fff';X.font='bold 13px sans-serif';X.textAlign='center';const u=S.up[S.upSel];X.fillText(UP[S.upSel].e+' '+UP[S.upSel].n+' '+(u.lv>=4?'(máx.)':u.p+'/'+ucost(S.upSel)),W/2,32)}
+}
+function ui(){
+  $('m').textContent=S.money;$('ch').textContent=S.chest;$('po').textContent=S.pop+'/'+(2+n('casa')*4);$('hp').textContent=Math.round(S.happy);$('dy').textContent=S.day;$('tx').textContent=S.tax;$('log').textContent=S.log;
+  $('bt').innerHTML=Object.entries(T).map(([k,t])=>`<button data-b="${k}" class="${k===S.sel?'on':''}">${t.e} ${t.n} · ${t.cost}🪙 · mant. ${t.m}</button>`).join('');
+  $('up').innerHTML=Object.entries(UP).map(([k,u])=>{const v=S.up[k];return `<button data-u="${k}" class="${k===S.upSel?'on':''}">${u.e} ${u.n} nv ${v.lv}/4 · ${u.d} · ${v.lv>=4?'máx.':v.p+'/'+ucost(k)+'🪙'}</button>`}).join('');
+}
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.b){S.sel=b.dataset.b}else if(b.dataset.u){S.upSel=b.dataset.u}else if(b.dataset.tx){S.tax=Math.max(4,Math.min(30,S.tax+ +b.dataset.tx))}ui();b.blur()});
+const km={ArrowLeft:'L',KeyA:'L',ArrowRight:'R',KeyD:'R',Space:'T',KeyE:'T'};
+addEventListener('keydown',e=>{if(km[e.code]){keys[km[e.code]]=1;e.preventDefault()}});
+addEventListener('keyup',e=>{if(km[e.code])keys[km[e.code]]=0});
+[['bl','L'],['br','R'],['bt2','T']].forEach(([id,k])=>{const el=$(id);el.addEventListener('pointerdown',e=>{keys[k]=1;e.preventDefault()});['pointerup','pointerleave','pointercancel'].forEach(ev=>el.addEventListener(ev,()=>keys[k]=0))});
+let last=performance.now();ui();
+(function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt);draw();requestAnimationFrame(loop)})(last);
+setInterval(ui,500);
+</script><script>
+const PX=4,GY=G+6,KK='#2b1b12';
+function mk(rows,pal){const c=document.createElement('canvas'),g=c.getContext('2d');c.width=rows[0].length;c.height=rows.length;rows.forEach((r,y)=>[...r].forEach((ch,x)=>{if(pal[ch]){g.fillStyle=pal[ch];g.fillRect(x,y,1,1)}}));return c}
+const SPR={
+casa:mk(['......KK......','....KKRRKK....','..KKRRRRRRKK..','.KRRRRRRRRRRK.','KRRrRRRRRRrRRK','KrrrrrrrrrrrrK','.KWWWWWWWWWWK.','.KWWBBWWBBWWK.','.KWWBBWWBBWWK.','.KWWWWDDWWWWK.','.KWWWWDDWWWWK.','.KwwwwDDwwwwK.','..KKKKKKKKKK..'],{K:KK,R:'#b03a3a',r:'#7a2626',W:'#e2c08d',w:'#b8935f',D:'#5a3a1e',B:'#8ecae6'}),
+mercado:mk(['.KKKKKKKKKKKK.','KRWRWRWRWRWRWK','KrwrwrwrwrwrwK','.KKKKKKKKKKKK.','.KD........DK.','.KD.GG..YY.DK.','.KD........DK.','.KCCCCCCCCCCK.','.KCCCCCCCCCCK.','..KKKKKKKKKK..'],{K:KK,R:'#c7364b',r:'#8c2336',W:'#f4f0e6',w:'#c9c4b8',D:'#7a5230',G:'#6bbf59',Y:'#f2c94c',C:'#a9743f'}),
+granja:mk(['....KKKK......','...KRRRRK.....','..KRRRRRRK....','..KWWWWWWK....','..KWWDDWWK....','KKKKKKKKKKKKKK','FYFYFYFYFYFYFY','YFYFYFYFYFYFYF','FYFYFYFYFYFYFY','GGGGGGGGGGGGGG'],{K:KK,R:'#b03a3a',W:'#d9b27a',D:'#5a3a1e',Y:'#e0b83c',F:'#6b4a2b',G:'#5fa83e'}),
+tree:mk(['....KKKKKK....','..KKGGGGGGKK..','.KGGGgGGGGGGK.','KGGGGGGGgGGGGK','KGgGGGGGGGGGGK','KGGGGGGGGgGGGK','.KGGGGgGGGGGK.','..KKGGGGGGKK..','....KKKKKK....','.....KTTK.....','.....KTTK.....','.....KTTK.....','....KKKKKK....'],{K:KK,G:'#4f9d5f',g:'#6cc07a',T:'#7a5230'}),
+hall:mk(['..........KK..........','.........KRRK.........','........KKKKKK........','.......KRRRRRRK.......','......KRRRRRRRRK......','.....KRRrRRRRrRRK.....','....KRRRRRRRRRRRRK....','...KKKKKKKKKKKKKKKK...','...KSSSSSSSSSSSSSSK...','...KSSBBSSSSSSBBSSK...','...KSSBBSSAASSBBSSK...','...KSSSSSSAASSSSSSK...','...KSSSSSSSSSSSSSSK...','...KSSBBSSDDSSBBSSK...','...KSSBBSSDDSSBBSSK...','...KSSSSSSDDSSSSSSK...','...KssssssDDssssssK...','...KKKKKKKKKKKKKKKK...'],{K:KK,R:'#b03a3a',r:'#7a2626',S:'#a9b4ba',s:'#7d8a90',B:'#8ecae6',A:'#f6c453',D:'#5a3a1e'}),
+chest:mk(['.KKKKKK.','KCCCCCCK','KCCYYCCK','KKKKKKKK','KCCCCCCK','KCCCCCCK','.KKKKKK.'],{K:KK,C:'#a9743f',Y:'#f6c453'}),
+coin:mk(['.YY.','YWYY','YYYY','.YY.'],{Y:'#f6c453',W:'#fff3b0'})};
+const body=['.Y.YY.Y.','.YYYYYY.','..SSSS..','..SKSK..','..SSSS..','.CCCCCC.','SCCCCCCS','.CCCCCC.','.CCCCCC.','..PPPP..','..PPPP..'],PP={Y:'#f6c453',S:'#f0c39a',K:KK,C:'#2a6f97',P:'#5b3a29'};
+const MAN=[mk([...body,'..P..P..','..K..K..'],PP),mk([...body,'...PP...','...KK...'],PP)];
+const NP=['#c7566b','#4f9d5f','#caa83c','#7b5cb8','#e07a3a','#3d9ea8'].map(c=>mk(['.SS.','.SS.','CCCC','CCCC','.PP.','.KK.'],{S:'#f0c39a',C:c,P:'#5b3a29',K:KK}));
+function dspr(s,x,y,sc,fl){const w=s.width*sc,h=s.height*sc;X.save();X.translate(Math.round(x),Math.round(y));if(fl)X.scale(-1,1);X.drawImage(s,-w/2,-h,w,h);X.restore()}
+const hs=i=>Math.abs(Math.sin(i*127.1)*43758.5453)%1;
+function lbl(s,x,y,c){X.font='20px VT323,monospace';X.textAlign='center';X.fillStyle='#000';X.fillText(s,x+2,y+2);X.fillStyle=c||'#fff';X.fillText(s,x,y)}
+function draw(){
+ const f=S.t/DAY,L=Math.sin(f*Math.PI),cam=Math.round(Math.max(-LIM,Math.min(LIM-W,P.x-W/2))),ts=performance.now()/1000;
+ X.imageSmoothingEnabled=false;
+ for(let i=0;i<10;i++){X.fillStyle=`hsl(${212-i*2},${55+10*L}%,${12+26*L+i*(1.5+3.5*L)}%)`;X.fillRect(0,i*32,W,33)}
+ X.fillStyle=L>.25?'#fff1a8':'#dfe6ee';X.fillRect(Math.round(60+f*840),Math.round(230-L*170),28,28);
+ X.fillStyle=`rgba(255,255,255,${.25+.55*L})`;for(let i=0;i<4;i++){const cx=((i*290+ts*6-cam*.2)%1200+1200)%1200-120,cy=40+(i*28)%70;X.fillRect(cx,cy,72,12);X.fillRect(cx+12,cy-12,44,12)}
+ for(let x=0;x<W;x+=8){const wx=x+cam*.4,h=Math.round((60+30*Math.sin(wx*.006)+14*Math.sin(wx*.019))/4)*4;X.fillStyle=`hsl(150,25%,${14+16*L}%)`;X.fillRect(x,G-h,8,h)}
+ X.save();X.translate(-cam,0);
+ X.fillStyle=`hsl(108,45%,${24+16*L}%)`;X.fillRect(cam,G,W,8);X.fillStyle=`hsl(28,38%,${18+14*L}%)`;X.fillRect(cam,G+8,W,H-G-8);
+ for(let x=Math.floor(cam/16)*16;x<cam+W+16;x+=16){const r=hs(x/16);X.fillStyle='rgba(0,0,0,.2)';X.fillRect(x+(r*8|0),G+20+((r*977|0)%4)*16,8,4);if(r>.55){X.fillStyle=`hsl(112,45%,${18+14*L}%)`;X.fillRect(x+4,G-4,4,4);X.fillRect(x+8,G-8,4,8)}}
+ const lv=S.up.vel.lv+S.up.imp.lv+S.up.fel.lv;dspr(SPR.hall,0,GY,5);X.fillStyle='#f6c453';for(let i=0;i<lv;i++)X.fillRect(-lv*5+i*10,GY-104,6,6);
+ dspr(SPR.chest,90,GY,4);if(S.chest>0)lbl(S.chest,90,GY-36,'#f6c453');
+ X.filter=S.unpaid?'grayscale(.8)':'none';
+ for(const p of plots)if(p.t){if(p.t==='parque'){dspr(SPR.tree,p.x-16,GY,4);dspr(SPR.tree,p.x+18,GY,3)}else dspr(SPR[p.t],p.x,GY,4)}
+ X.filter='none';
+ for(const p of plots)if(!p.t){const near=Math.abs(P.x-p.x)<70;X.fillStyle=near?'#f6c453':'rgba(255,255,255,.6)';for(let i=0;i<8;i+=2)X.fillRect(p.x-32+i*8,GY-2,8,4);X.fillRect(p.x-32,GY-28,4,28);X.fillRect(p.x+28,GY-28,4,28);
+  X.globalAlpha=.35;dspr(S.sel==='parque'?SPR.tree:SPR[S.sel],p.x,GY,4);X.globalAlpha=1;if(p.p||near)lbl(p.p+'/'+T[S.sel].cost,p.x,GY-64,near?'#f6c453':'#fff')}
+ let ext=150;for(const p of plots)if(p.t)ext=Math.max(ext,Math.abs(p.x)+40);
+ for(let i=0;i<Math.min(S.pop,16);i++){const ph=ts*(.25+(i%4)*.08)+i*2.3,x=Math.sin(ph)*ext*(.4+hs(i)*.6);dspr(NP[i%6],x,GY+6+(i%3)*5-(Math.abs(Math.sin(ts*8+i))>.7?4:0),4,Math.cos(ph)<0)}
+ dspr(MAN[(keys.L||keys.R)?Math.floor(P.walk)%2:0],P.x,GY+8,4,P.dir<0);
+ for(const c of coins)dspr(SPR.coin,c.x+(c.tx-c.x)*c.t,GY-30-Math.sin(c.t*Math.PI)*70,3);
+ X.fillStyle=`rgba(8,14,50,${.42*(1-L)})`;X.fillRect(cam,0,W,H);
+ for(const g of floats){X.globalAlpha=Math.max(0,1-g.t/1.4);lbl(g.s,g.x,g.y-g.t*30);X.globalAlpha=1}
+ X.restore();
+ X.fillStyle='rgba(0,0,0,.5)';X.fillRect(0,0,W,10);X.fillStyle='#f6c453';X.fillRect(0,0,Math.round(W*S.t/DAY/8)*8,10);
+ if(Math.abs(P.x)<100){const u=S.up[S.upSel];X.fillStyle='rgba(0,0,0,.6)';X.fillRect(W/2-170,18,340,30);lbl(UP[S.upSel].n+' '+(u.lv>=4?'(máx.)':u.p+'/'+ucost(S.upSel)),W/2,40)}
+}
+</script></body></html>
