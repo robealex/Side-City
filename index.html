@@ -207,12 +207,12 @@ const _dr=draw;draw=function(){_dr();const cam=Math.round(Math.max(-LIM,Math.min
  X.fillStyle='#ffe28a';for(const s of shots)X.fillRect(Math.round(s.x+(s.tx-s.x)*s.t)-3,Math.round(GY-60+40*s.t),6,6);
  X.restore();
  for(const h of TH){const sx=h.x-cam;if(sx<10)lbl('⚠',20,70,'#ff6b5a');else if(sx>W-10)lbl('⚠',W-20,70,'#ff6b5a')}};
-const _ui=ui;ui=function(){_ui();$('lv').textContent=LV[S.lvl];
+const _ui=ui;ui=function(){_ui();$('lv').textContent=LV[S.lvl]+(S.lvl<3?' → '+LV[S.lvl+1]+' ('+S.pop+'/'+[12,30,60][S.lvl]+' hab.)':' (máx.)');
  $('bt').querySelectorAll('button').forEach(b=>{const t=T[b.dataset.b];if(t&&t.lv>S.lvl){b.disabled=true;b.textContent+=' 🔒 '+LV[t.lv]}});
  $('qs').textContent='Logros: '+Q.map((q,i)=>(S.q[i]?'✔ ':'○ ')+q.t).join('  ·  ')};
 $('log').insertAdjacentHTML('afterend','<div id="qs" class="hint"></div>');
 $('hud').insertAdjacentHTML('beforeend','<span>🏘 <b id="lv"></b></span><span><button id="ng">🗑 Nueva</button></span>');
-document.querySelector('.hint').textContent+=' Ladrones: atrápalos acercándote, o frénalos con muralla y torres. Las tormentas dañan edificios: lanza 5 monedas para repararlos. Se guarda sola.';
+document.querySelector('.hint').textContent+=' Ladrones: atrápalos acercándote, o frénalos con muralla y torres. Las tormentas dañan edificios: lanza 5 monedas para repararlos. Subir de nivel: necesitas habitantes (Pueblo 12, Ciudad 30, Capital 60). Construye casas (+4 cada una), mantén la felicidad sobre 45% y alimenta a todos con granjas. Se guarda sola.';
 let ngc=0;$('ng').addEventListener('click',()=>{if(!ngc){ngc=1;$('ng').textContent='¿Seguro?';setTimeout(()=>{ngc=0;$('ng').textContent='🗑 Nueva'},3000)}else{try{localStorage.removeItem(KEY)}catch(e){}location.reload()}});
 setInterval(()=>ui(),500);setInterval(save,5000);ui();
 </script></body></html>
