@@ -161,4 +161,58 @@ function draw(){
  X.fillStyle='rgba(0,0,0,.5)';X.fillRect(0,0,W,10);X.fillStyle='#f6c453';X.fillRect(0,0,Math.round(W*S.t/DAY/8)*8,10);
  if(Math.abs(P.x)<100){const u=S.up[S.upSel];X.fillStyle='rgba(0,0,0,.6)';X.fillRect(W/2-170,18,340,30);lbl(UP[S.upSel].n+' '+(u.lv>=4?'(máx.)':u.p+'/'+ucost(S.upSel)),W/2,40)}
 }
+</script><script>
+const LV=['Aldea','Pueblo','Ciudad','Capital'],KEY='villaMoneda_v1',TH=[],shots=[];
+S.lvl=0;S.kills=0;S.q=[];P.warn=0;plots.forEach((p,i)=>p.i=i);
+Object.assign(T,{muralla:{n:'Muralla',e:'🧱',cost:18,m:1,c:'#a9b4ba',lv:1},torre:{n:'Torre',e:'🗼',cost:30,m:2,c:'#a9b4ba',lv:2}});
+Object.values(T).forEach(t=>t.lv=t.lv||0);T.mercado.lv=1;
+SPR.muralla=mk(['K.KK.KK.KK.KK.','KKKKKKKKKKKKKK','KSSSSSsSSSSSSK','KSSsSSSSSSsSSK','KSSSSSSSSSSSSK','KsSSSSSsSSSSsK','KKKKKKKKKKKKKK'],{K:KK,S:'#a9b4ba',s:'#7d8a90'});
+SPR.torre=mk(['KK.KK.KK','KSSSSSSK','KSSSSSSK','.KSSSSK.','.KSKKSK.','.KSKKSK.','.KSSSSK.','.KSSSSK.','.KSSSSK.','.KSSSSK.','.KSSDDK.','.KSSDDK.','KKKKKKKK'],{K:KK,S:'#a9b4ba',D:'#5a3a1e'});
+const THS=mk(['.PP.','PRRP','.PP.','PPPP','.PP.','.KK.'],{P:'#3b2a4f',R:'#e0453a',K:KK});
+const Q=[{t:'Llega a 10 habitantes',f:()=>S.pop>=10},{t:'Construye un mercado',f:()=>n('mercado')>0},{t:'Ten 3 parques',f:()=>n('parque')>=3},{t:'Repele a un ladrón',f:()=>S.kills>0},{t:'Alcanza el nivel Ciudad',f:()=>S.lvl>=2},{t:'Capital con 70% de felicidad',f:()=>S.lvl>=3&&S.happy>=70}];
+function save(){try{localStorage.setItem(KEY,JSON.stringify({s:{money:S.money,chest:S.chest,pop:S.pop,happy:S.happy,day:S.day,t:S.t,tax:S.tax,sel:S.sel,upSel:S.upSel,unpaid:S.unpaid,up:S.up,kills:S.kills,q:S.q,lvl:S.lvl},pl:plots.map(p=>({t:p.t,p:p.p,dmg:p.dmg})),x:P.x}))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem(KEY));if(d){Object.assign(S,d.s);d.pl.forEach((q,i)=>{if(plots[i])Object.assign(plots[i],q)});P.x=d.x||0}}catch(e){}
+function target(){if(Math.abs(P.x)<100)return{hall:1};let b=null,d=70;for(const p of plots){const k=Math.abs(p.x-P.x);if((!p.t||p.dmg)&&k<d){d=k;b=p}}return b}
+function toss(){const g=target();if(!g)return;
+ if(g.hall){const u=S.up[S.upSel];if(u.lv>=4||S.money<1)return;S.money--;u.p++;coins.push({x:P.x,tx:0,t:0});if(u.p>=ucost(S.upSel)){u.p=0;u.lv++;say(UP[S.upSel].n+' nivel '+u.lv,0)}}
+ else if(g.dmg){if(S.money<1)return;S.money--;g.p++;coins.push({x:P.x,tx:g.x,t:0});if(g.p>=5){g.p=0;g.dmg=false;say('¡Reparado!',g.x)}}
+ else{const t=T[S.sel];if(t.lv>S.lvl){if(P.warn<=0){say('Requiere '+LV[t.lv],g.x);P.warn=1}return}if(S.money<1)return;S.money--;g.p++;coins.push({x:P.x,tx:g.x,t:0});if(g.p>=t.cost){g.t=S.sel;g.p=0;say('¡Construido!',g.x)}}
+ ui()}
+function afterDay(){
+ let ev='';const built=plots.filter(p=>p.t&&!p.dmg),r=Math.random();
+ if(S.day>=3&&r<.14&&built.length){const p=built[Math.random()*built.length|0];p.dmg=true;p.p=0;ev='⛈ Tormenta dañó '+T[p.t].n+' (repáralo con 5🪙)'}
+ else if(r<.27){const b=10+S.pop;S.chest+=b;ev='🎪 Feria: +'+b+' monedas en el cofre'}
+ else if(r<.37&&S.day>=3){S.happy=Math.max(0,S.happy-12);ev='☀ Sequía: la gente está inquieta'}
+ if(S.day>=4&&Math.random()<Math.min(.65,.15+S.day*.025)){const c=1+Math.floor(S.day/7)+(Math.random()<.4?1:0),sd=Math.random()<.5?-1:1;for(let i=0;i<c;i++)TH.push({x:sd*(LIM+40+i*60),v:-sd*(65+Math.random()*20),pass:{},stall:0,hp:1+(S.day>14?1:0)});ev+=' ⚠ ¡Ladrones por el '+(sd<0?'oeste':'este')+'!'}
+ if(ev)S.log+=' · '+ev;save();ui()}
+const _end=endDay;endDay=function(){const d=plots.filter(p=>p.t&&p.dmg);d.forEach(p=>{p.k=p.t;p.t=null});_end();d.forEach(p=>{p.t=p.k});afterDay()};
+function stepThieves(dt){
+ for(const p of plots)if(p.t==='torre')p.cd=(p.cd||0)-dt;
+ for(let i=TH.length;i--;){const h=TH[i];
+  if(Math.abs(h.x-P.x)<32){S.kills++;S.money+=2;say('+2🪙',h.x);TH.splice(i,1);continue}
+  for(const p of plots)if(p.t==='torre'&&!p.dmg&&p.cd<=0&&Math.abs(p.x-h.x)<280){p.cd=1.3;shots.push({x:p.x,tx:h.x,t:0});h.hp--;break}
+  if(h.hp<=0){S.kills++;S.money+=2;say('+2🪙',h.x);TH.splice(i,1);continue}
+  if(h.stall>0){h.stall-=dt;continue}
+  h.x+=h.v*dt;
+  for(const p of plots)if(p.t==='muralla'&&!p.dmg&&!h.pass[p.i]&&Math.abs(h.x-p.x)<14){h.pass[p.i]=1;h.stall=2.5}
+  if(Math.abs(h.x)<30){const def=Math.min(.6,.2*n('muralla')),loot=Math.ceil((S.chest+S.money)*.2*(1-def));let f=Math.min(S.chest,loot);S.chest-=f;S.money-=Math.min(S.money,loot-f);say('-'+loot+'🪙 robadas',0);S.log='🥷 Un ladrón robó '+loot+' monedas'+(def?' (la muralla redujo el robo)':'');TH.splice(i,1);ui()}}
+ for(let i=shots.length;i--;){shots[i].t+=dt*4;if(shots[i].t>=1)shots.splice(i,1)}}
+const _upd=update;update=function(dt){_upd(dt);P.warn-=dt;stepThieves(dt);
+ const nl=S.pop>=60?3:S.pop>=30?2:S.pop>=12?1:0;if(nl>S.lvl){S.lvl=nl;S.money+=30;S.log='🏘 ¡Tu ciudad ahora es '+LV[nl]+'! Nuevos edificios (+30🪙)';say(LV[nl],P.x);ui()}
+ Q.forEach((q,i)=>{if(!S.q[i]&&q.f()){S.q[i]=1;S.money+=25;say('🏆 '+q.t,P.x);S.log='🏆 Logro: '+q.t+' (+25🪙)';if(S.q.filter(Boolean).length===Q.length)S.log+=' · ¡GANASTE! Puedes seguir jugando.';ui()}})};
+const _dr=draw;draw=function(){_dr();const cam=Math.round(Math.max(-LIM,Math.min(LIM-W,P.x-W/2)));
+ X.save();X.translate(-cam,0);
+ for(const p of plots)if(p.dmg){X.fillStyle='rgba(70,0,0,.4)';X.fillRect(p.x-30,GY-60,60,60);lbl('🔧 '+p.p+'/5',p.x,GY-66,'#ff9b8a')}
+ for(const h of TH)dspr(THS,h.x,GY+8,4);
+ X.fillStyle='#ffe28a';for(const s of shots)X.fillRect(Math.round(s.x+(s.tx-s.x)*s.t)-3,Math.round(GY-60+40*s.t),6,6);
+ X.restore();
+ for(const h of TH){const sx=h.x-cam;if(sx<10)lbl('⚠',20,70,'#ff6b5a');else if(sx>W-10)lbl('⚠',W-20,70,'#ff6b5a')}};
+const _ui=ui;ui=function(){_ui();$('lv').textContent=LV[S.lvl];
+ $('bt').querySelectorAll('button').forEach(b=>{const t=T[b.dataset.b];if(t&&t.lv>S.lvl){b.disabled=true;b.textContent+=' 🔒 '+LV[t.lv]}});
+ $('qs').textContent='Logros: '+Q.map((q,i)=>(S.q[i]?'✔ ':'○ ')+q.t).join('  ·  ')};
+$('log').insertAdjacentHTML('afterend','<div id="qs" class="hint"></div>');
+$('hud').insertAdjacentHTML('beforeend','<span>🏘 <b id="lv"></b></span><span><button id="ng">🗑 Nueva</button></span>');
+document.querySelector('.hint').textContent+=' Ladrones: atrápalos acercándote, o frénalos con muralla y torres. Las tormentas dañan edificios: lanza 5 monedas para repararlos. Se guarda sola.';
+let ngc=0;$('ng').addEventListener('click',()=>{if(!ngc){ngc=1;$('ng').textContent='¿Seguro?';setTimeout(()=>{ngc=0;$('ng').textContent='🗑 Nueva'},3000)}else{try{localStorage.removeItem(KEY)}catch(e){}location.reload()}});
+setInterval(()=>ui(),500);setInterval(save,5000);ui();
 </script></body></html>
