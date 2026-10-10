@@ -47,7 +47,7 @@ const S={money:30,chest:0,pop:2,happy:70,day:1,t:0,tax:10,sel:'casa',upSel:'vel'
 const P={x:0,dir:1,walk:0,cd:0};
 const plots=[];for(let i=1;i<=7;i++)plots.push({x:-170*i,t:null,p:0},{x:170*i,t:null,p:0});
 const coins=[],floats=[],keys={};
-const n=t=>plots.filter(p=>p.t===t).length;
+const n=t=>plots.reduce((a,p)=>a+(p.t===t?1+(p.lv||0):0),0);
 const ucost=k=>20*(S.up[k].lv+1);
 const say=(s,x)=>floats.push({x,y:G-120,s,t:0});
 
@@ -62,7 +62,7 @@ function toss(){
 function endDay(){
   const hm=.4+S.happy/100,imp=S.up.imp.lv;
   const inc=Math.floor(S.pop*S.tax/6*hm*(1+.15*imp)+n('mercado')*6*hm);
-  let mt=0;for(const p of plots)if(p.t)mt+=T[p.t].m;
+  let mt=0;for(const p of plots)if(p.t)mt+=T[p.t].m+(p.lv||0);
   S.chest+=inc;let pay=mt,f=Math.min(S.chest,pay);S.chest-=f;pay-=f;
   f=Math.min(S.money,pay);S.money-=f;pay-=f;S.unpaid=pay>0;
   const cap=2+n('casa')*4;
@@ -170,12 +170,14 @@ SPR.muralla=mk(['K.KK.KK.KK.KK.','KKKKKKKKKKKKKK','KSSSSSsSSSSSSK','KSSsSSSSSSsS
 SPR.torre=mk(['KK.KK.KK','KSSSSSSK','KSSSSSSK','.KSSSSK.','.KSKKSK.','.KSKKSK.','.KSSSSK.','.KSSSSK.','.KSSSSK.','.KSSSSK.','.KSSDDK.','.KSSDDK.','KKKKKKKK'],{K:KK,S:'#a9b4ba',D:'#5a3a1e'});
 const THS=mk(['.PP.','PRRP','.PP.','PPPP','.PP.','.KK.'],{P:'#3b2a4f',R:'#e0453a',K:KK});
 const Q=[{t:'Llega a 10 habitantes',f:()=>S.pop>=10},{t:'Construye un mercado',f:()=>n('mercado')>0},{t:'Ten 3 parques',f:()=>n('parque')>=3},{t:'Repele a un ladrón',f:()=>S.kills>0},{t:'Alcanza el nivel Ciudad',f:()=>S.lvl>=2},{t:'Capital con 70% de felicidad',f:()=>S.lvl>=3&&S.happy>=70}];
-function save(){try{localStorage.setItem(KEY,JSON.stringify({s:{money:S.money,chest:S.chest,pop:S.pop,happy:S.happy,day:S.day,t:S.t,tax:S.tax,sel:S.sel,upSel:S.upSel,unpaid:S.unpaid,up:S.up,kills:S.kills,q:S.q,lvl:S.lvl},pl:plots.map(p=>({t:p.t,p:p.p,dmg:p.dmg})),x:P.x}))}catch(e){}}
-try{const d=JSON.parse(localStorage.getItem(KEY));if(d){Object.assign(S,d.s);d.pl.forEach((q,i)=>{if(plots[i])Object.assign(plots[i],q)});P.x=d.x||0}}catch(e){}
-function target(){if(Math.abs(P.x)<100)return{hall:1};let b=null,d=70;for(const p of plots){const k=Math.abs(p.x-P.x);if((!p.t||p.dmg)&&k<d){d=k;b=p}}return b}
+function addPlots(l){(l===1?[1,2,3]:l===2?[4,5,6]:[]).forEach(i=>{for(const s of[-1,1])plots.push({x:s*(85+170*i),t:null,p:0,i:plots.length})})}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({s:{money:S.money,chest:S.chest,pop:S.pop,happy:S.happy,day:S.day,t:S.t,tax:S.tax,sel:S.sel,upSel:S.upSel,unpaid:S.unpaid,up:S.up,kills:S.kills,q:S.q,lvl:S.lvl},pl:plots.map(p=>({t:p.t,p:p.p,dmg:p.dmg,lv:p.lv})),x:P.x}))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem(KEY));if(d){Object.assign(S,d.s);for(let l=1;l<=S.lvl;l++)addPlots(l);d.pl.forEach((q,i)=>{if(plots[i])Object.assign(plots[i],q)});P.x=d.x||0}}catch(e){}
+function target(){if(Math.abs(P.x)<100)return{hall:1};let b=null,d=70;for(const p of plots){const k=Math.abs(p.x-P.x);if((!p.t||p.dmg||(p.lv||0)<2)&&k<d){d=k;b=p}}return b}
 function toss(){const g=target();if(!g)return;
  if(g.hall){const u=S.up[S.upSel];if(u.lv>=4||S.money<1)return;S.money--;u.p++;coins.push({x:P.x,tx:0,t:0});if(u.p>=ucost(S.upSel)){u.p=0;u.lv++;say(UP[S.upSel].n+' nivel '+u.lv,0)}}
  else if(g.dmg){if(S.money<1)return;S.money--;g.p++;coins.push({x:P.x,tx:g.x,t:0});if(g.p>=5){g.p=0;g.dmg=false;say('¡Reparado!',g.x)}}
+ else if(g.t){const c=T[g.t].cost*((g.lv||0)+2);if(S.money<1)return;S.money--;g.p++;coins.push({x:P.x,tx:g.x,t:0});if(g.p>=c){g.p=0;g.lv=(g.lv||0)+1;say('¡Mejorado! Nivel '+(g.lv+1),g.x)}}
  else{const t=T[S.sel];if(t.lv>S.lvl){if(P.warn<=0){say('Requiere '+LV[t.lv],g.x);P.warn=1}return}if(S.money<1)return;S.money--;g.p++;coins.push({x:P.x,tx:g.x,t:0});if(g.p>=t.cost){g.t=S.sel;g.p=0;say('¡Construido!',g.x)}}
  ui()}
 function afterDay(){
@@ -198,7 +200,7 @@ function stepThieves(dt){
   if(Math.abs(h.x)<30){const def=Math.min(.6,.2*n('muralla')),loot=Math.ceil((S.chest+S.money)*.2*(1-def));let f=Math.min(S.chest,loot);S.chest-=f;S.money-=Math.min(S.money,loot-f);say('-'+loot+'🪙 robadas',0);S.log='🥷 Un ladrón robó '+loot+' monedas'+(def?' (la muralla redujo el robo)':'');TH.splice(i,1);ui()}}
  for(let i=shots.length;i--;){shots[i].t+=dt*4;if(shots[i].t>=1)shots.splice(i,1)}}
 const _upd=update;update=function(dt){_upd(dt);P.warn-=dt;stepThieves(dt);
- const nl=S.pop>=60?3:S.pop>=30?2:S.pop>=12?1:0;if(nl>S.lvl){S.lvl=nl;S.money+=30;S.log='🏘 ¡Tu ciudad ahora es '+LV[nl]+'! Nuevos edificios (+30🪙)';say(LV[nl],P.x);ui()}
+ const nl=S.pop>=60?3:S.pop>=30?2:S.pop>=12?1:0;if(nl>S.lvl){for(let l=S.lvl+1;l<=nl;l++)addPlots(l);S.lvl=nl;S.money+=30;S.log='🏘 ¡Tu ciudad ahora es '+LV[nl]+'! Nuevos edificios y terrenos (+30🪙)';say(LV[nl],P.x);ui()}
  Q.forEach((q,i)=>{if(!S.q[i]&&q.f()){S.q[i]=1;S.money+=25;say('🏆 '+q.t,P.x);S.log='🏆 Logro: '+q.t+' (+25🪙)';if(S.q.filter(Boolean).length===Q.length)S.log+=' · ¡GANASTE! Puedes seguir jugando.';ui()}})};
 const _dr=draw;draw=function(){_dr();const cam=Math.round(Math.max(-LIM,Math.min(LIM-W,P.x-W/2)));
  X.save();X.translate(-cam,0);
@@ -212,7 +214,12 @@ const _ui=ui;ui=function(){_ui();$('lv').textContent=LV[S.lvl]+(S.lvl<3?' → '+
  $('qs').textContent='Logros: '+Q.map((q,i)=>(S.q[i]?'✔ ':'○ ')+q.t).join('  ·  ')};
 $('log').insertAdjacentHTML('afterend','<div id="qs" class="hint"></div>');
 $('hud').insertAdjacentHTML('beforeend','<span>🏘 <b id="lv"></b></span><span><button id="ng">🗑 Nueva</button></span>');
-document.querySelector('.hint').textContent+=' Ladrones: atrápalos acercándote, o frénalos con muralla y torres. Las tormentas dañan edificios: lanza 5 monedas para repararlos. Subir de nivel: necesitas habitantes (Pueblo 12, Ciudad 30, Capital 60). Construye casas (+4 cada una), mantén la felicidad sobre 45% y alimenta a todos con granjas. Se guarda sola.';
+document.querySelector('.hint').textContent+=' Ladrones: atrápalos acercándote, o frénalos con muralla y torres. Las tormentas dañan edificios: lanza 5 monedas para repararlos. Subir de nivel: necesitas habitantes (Pueblo 12, Ciudad 30, Capital 60). Construye casas (+4 cada una), mantén la felicidad sobre 45% y alimenta a todos con granjas. Mejora tus edificios lanzándoles monedas (hasta nivel 3): cada nivel cuenta como un edificio extra. Pueblo y Ciudad abren más terrenos. Se guarda sola.';
 let ngc=0;$('ng').addEventListener('click',()=>{if(!ngc){ngc=1;$('ng').textContent='¿Seguro?';setTimeout(()=>{ngc=0;$('ng').textContent='🗑 Nueva'},3000)}else{try{localStorage.removeItem(KEY)}catch(e){}location.reload()}});
 setInterval(()=>ui(),500);setInterval(save,5000);ui();
+</script><script>
+const _dr2=draw;draw=function(){_dr2();const cam=Math.round(Math.max(-LIM,Math.min(LIM-W,P.x-W/2)));X.save();X.translate(-cam,0);
+ for(const p of plots)if(p.t){const l=p.lv||0;if(l)lbl('★'.repeat(l),p.x,GY-72,'#f6c453');
+  if(!p.dmg&&l<2&&Math.abs(P.x-p.x)<70)lbl('⬆ Nivel '+(l+2)+'  '+p.p+'/'+T[p.t].cost*(l+2),p.x,GY-90,'#9be28a')}
+ X.restore()};
 </script></body></html>
