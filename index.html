@@ -171,8 +171,8 @@ SPR.torre=mk(['KK.KK.KK','KSSSSSSK','KSSSSSSK','.KSSSSK.','.KSKKSK.','.KSKKSK.',
 const THS=mk(['.PP.','PRRP','.PP.','PPPP','.PP.','.KK.'],{P:'#3b2a4f',R:'#e0453a',K:KK});
 const Q=[{t:'Llega a 10 habitantes',f:()=>S.pop>=10},{t:'Construye un mercado',f:()=>n('mercado')>0},{t:'Ten 3 parques',f:()=>n('parque')>=3},{t:'Repele a un ladrón',f:()=>S.kills>0},{t:'Alcanza el nivel Ciudad',f:()=>S.lvl>=2},{t:'Capital con 70% de felicidad',f:()=>S.lvl>=3&&S.happy>=70}];
 function addPlots(l){(l===1?[1,2,3]:l===2?[4,5,6]:[]).forEach(i=>{for(const s of[-1,1])plots.push({x:s*(85+170*i),t:null,p:0,i:plots.length})})}
-function save(){try{localStorage.setItem(KEY,JSON.stringify({s:{money:S.money,chest:S.chest,pop:S.pop,happy:S.happy,day:S.day,t:S.t,tax:S.tax,sel:S.sel,upSel:S.upSel,unpaid:S.unpaid,up:S.up,kills:S.kills,q:S.q,lvl:S.lvl},pl:plots.map(p=>({t:p.t,p:p.p,dmg:p.dmg,lv:p.lv})),x:P.x}))}catch(e){}}
-try{const d=JSON.parse(localStorage.getItem(KEY));if(d){Object.assign(S,d.s);for(let l=1;l<=S.lvl;l++)addPlots(l);d.pl.forEach((q,i)=>{if(plots[i])Object.assign(plots[i],q)});P.x=d.x||0}}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify({s:{money:S.money,chest:S.chest,pop:S.pop,happy:S.happy,day:S.day,t:S.t,tax:S.tax,sel:S.sel,upSel:S.upSel,unpaid:S.unpaid,up:S.up,kills:S.kills,q:S.q,lvl:S.lvl},pl:plots.map(p=>({t:p.t,p:p.p,dmg:p.dmg,lv:p.lv})),x:P.x,h:P.hold||null}))}catch(e){}}
+try{const d=JSON.parse(localStorage.getItem(KEY));if(d){Object.assign(S,d.s);for(let l=1;l<=S.lvl;l++)addPlots(l);d.pl.forEach((q,i)=>{if(plots[i])Object.assign(plots[i],q)});P.x=d.x||0;P.hold=d.h||null}}catch(e){}
 function target(){if(Math.abs(P.x)<100)return{hall:1};let b=null,d=70;for(const p of plots){const k=Math.abs(p.x-P.x);if((!p.t||p.dmg||(p.lv||0)<2)&&k<d){d=k;b=p}}return b}
 function toss(){const g=target();if(!g)return;
  if(g.hall){const u=S.up[S.upSel];if(u.lv>=4||S.money<1)return;S.money--;u.p++;coins.push({x:P.x,tx:0,t:0});if(u.p>=ucost(S.upSel)){u.p=0;u.lv++;say(UP[S.upSel].n+' nivel '+u.lv,0)}}
@@ -222,4 +222,29 @@ const _dr2=draw;draw=function(){_dr2();const cam=Math.round(Math.max(-LIM,Math.m
  for(const p of plots)if(p.t){const l=p.lv||0;if(l)lbl('★'.repeat(l),p.x,GY-72,'#f6c453');
   if(!p.dmg&&l<2&&Math.abs(P.x-p.x)<70)lbl('⬆ Nivel '+(l+2)+'  '+p.p+'/'+T[p.t].cost*(l+2),p.x,GY-90,'#9be28a')}
  X.restore()};
+</script><script>
+S.mode='build';P.hold=P.hold||null;P.dcd=0;
+function refund(g){let v=T[g.t].cost;for(let k=0;k<(g.lv||0);k++)v+=T[g.t].cost*(k+2);return Math.floor(v/2)}
+function target(){if(Math.abs(P.x)<100)return{hall:1};let b=null,d=70;for(const p of plots){const k=Math.abs(p.x-P.x);if(k>=d)continue;
+ if(S.mode==='demoler'||(S.mode==='mover'&&!P.hold)){if(p.t){d=k;b=p}}
+ else if(S.mode==='mover'){if(!p.t){d=k;b=p}}
+ else if(!p.t||p.dmg||(p.lv||0)<2){d=k;b=p}}return b}
+const _toss=toss;toss=function(){
+ if(S.mode==='build'){_toss();return}
+ const g=target();if(!g||g.hall||P.dcd>0)return;
+ if(S.mode==='demoler'){const r=refund(g);S.money+=r;say('🔨 +'+r+'🪙',g.x);g.t=null;g.p=0;g.lv=0;g.dmg=false;P.dcd=.7}
+ else if(!P.hold){if(S.money<5){say('Necesitas 5🪙',g.x);P.dcd=.7;return}S.money-=5;P.hold={t:g.t,lv:g.lv||0,dmg:!!g.dmg};g.t=null;g.p=0;g.lv=0;g.dmg=false;P.dcd=.5;say('Cargando '+T[P.hold.t].n,g.x)}
+ else{g.t=P.hold.t;g.lv=P.hold.lv;g.dmg=P.hold.dmg;g.p=0;P.hold=null;P.dcd=.5;say('¡Colocado!',g.x)}
+ ui();save()};
+const _upd2=update;update=function(dt){_upd2(dt);P.dcd-=dt};
+const _dr3=draw;draw=function(){_dr3();const cam=Math.round(Math.max(-LIM,Math.min(LIM-W,P.x-W/2))),t=target();X.save();X.translate(-cam,0);X.lineWidth=4;
+ if(S.mode==='demoler'&&t&&t.t){X.strokeStyle='#ff6b5a';X.strokeRect(t.x-34,GY-72,68,72);lbl('🔨 +'+refund(t)+'🪙',t.x,GY-80,'#ff9b8a')}
+ if(S.mode==='mover'&&!P.hold&&t&&t.t){X.strokeStyle='#6bb8ff';X.strokeRect(t.x-34,GY-72,68,72);lbl('✋ Recoger (5🪙)',t.x,GY-80,'#9fd0ff')}
+ if(P.hold){X.globalAlpha=.85;dspr(P.hold.t==='parque'?SPR.tree:SPR[P.hold.t],P.x,GY-62,3);X.globalAlpha=1}
+ X.restore();
+ if(S.mode==='demoler')lbl('Modo demoler: lanza una moneda al edificio',W/2,70,'#ff9b8a');
+ else if(S.mode==='mover'||P.hold)lbl(P.hold?'Cargando '+T[P.hold.t].n+': elige un terreno vacío (modo mover)':'Modo mover: elige un edificio',W/2,70,'#9fd0ff')};
+$('pad').insertAdjacentHTML('beforebegin','<div class="row"><h2>Modo</h2><span id="md" class="row"><button data-m="build" class="on">🏗 Construir</button><button data-m="demoler">🔨 Demoler</button><button data-m="mover">✋ Mover (5🪙)</button></span></div>');
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-m]');if(!b)return;S.mode=b.dataset.m;document.querySelectorAll('#md button').forEach(x=>x.classList.toggle('on',x===b));b.blur()});
+document.querySelector('.hint').textContent+=' Demoler devuelve la mitad de lo invertido. Mover cuesta 5🪙: recoge un edificio y colócalo en un terreno vacío sin perder sus mejoras.';
 </script></body></html>
